@@ -10,6 +10,9 @@ import android.widget.Button;
 import android.widget.EditText;
 import android.widget.Toast;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import io.socket.client.*;
 public class MainActivity extends Activity {
     private Socket socket;
@@ -43,9 +46,24 @@ public class MainActivity extends Activity {
             @Override
             public void call(Object... args) {
                 Log.d("Log", "Callback");
-                for (int i = 0; i < args.length; i++) {
-                    Toast.makeText(MainActivity.this, args[i].toString(), Toast.LENGTH_SHORT).show();
-                    Log.d("arg", args[i].toString());
+                JSONObject data = (JSONObject)args[0];
+                boolean valid = false;
+                try {
+                    valid = data.getBoolean("valid");
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+                if(valid){
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            nickField.setVisibility(View.GONE);
+                            join.setVisibility(View.GONE);
+                        }
+                    });
+                }else{
+                    nickField.setText("");
+                    nickField.setHint("That username is taken. Try again.");
                 }
             }
         });
