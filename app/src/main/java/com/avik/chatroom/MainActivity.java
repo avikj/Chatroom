@@ -2,35 +2,109 @@ package com.avik.chatroom;
 import android.app.Activity;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.text.Html;
 import android.util.Log;
+import android.view.KeyEvent;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.inputmethod.EditorInfo;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.TextView;
 import android.widget.Toast;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import io.socket.client.*;
+import io.socket.emitter.Emitter;
+
 public class MainActivity extends Activity {
     private Socket socket;
     private EditText nickField;
     private Button join;
+    private EditText messField;
+    private TextView content;
+    private String styledMsgs;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        styledMsgs="";
         setContentView(R.layout.activity_main);
         nickField = (EditText)findViewById(R.id.userField);
+        messField = (EditText)findViewById(R.id.messField);
+        content = (TextView)findViewById(R.id.content);
         join = (Button)findViewById(R.id.join);
+        messField.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            @Override
+            public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
+                boolean handled = false;
+                if (actionId == EditorInfo.IME_ACTION_SEND) {
+                    if(messField.getText().toString().length()>0) {
+
+                        socket.emit("send message", messField.getText().toString(), new Ack() {
+                            @Override
+                            public void call(Object... args) {//only called if there is an error
+                                String msg = (String)args[0];
+                                styledMsgs+="<font color = #ff0000>"+msg+"</font><br/>";
+                                content.setText(Html.fromHtml(styledMsgs));
+                            }
+                        });
+                        /*socket.emit('send message', $messageBox.val(), function(data){
+						    $chat.append('<span class="error">'+data+"<span><br/>");
+					    });*/
+                    }
+                    messField.setText("");
+                    handled = true;
+                }
+                return handled;
+            }
+        });
+
         try{
             socket = IO.socket("http://10.0.0.33:3000");
             socket.connect();
-        }catch(Exception e){
+        }catch(Exception e) {
             Log.d("error", "couldnt create socket");
             e.printStackTrace();
         }
+        socket.on("load old msgs", new Emitter.Listener() {
+            @Override
+            public void call(Object... args) {
+                JSONArray docs = (JSONArray)args[0];
+                for(int i = 0; i < docs.length(); i++){
+                    try {
+                        displayMsg((JSONObject)docs.get(i));
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }
+        });
+
+        socket.on("new message", new Emitter.Listener() {
+            @Override
+            public void call(Object... args) {
+                JSONObject o = (JSONObject)args[0];
+                try {
+                    displayMsg(o);
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+            }
+        });
+    }
+
+    public void displayMsg(JSONObject msg) throws JSONException{
+        styledMsgs+="<b><font color = "+msg.getString("color")+">"+msg.getString("nick")+": </font></b>"+msg.getString("msg")+"<br/>";
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                content.setText(Html.fromHtml(styledMsgs));
+            }
+        });
     }
 
     @Override
@@ -59,11 +133,18 @@ public class MainActivity extends Activity {
                         public void run() {
                             nickField.setVisibility(View.GONE);
                             join.setVisibility(View.GONE);
+                            content.setVisibility(View.VISIBLE);
+                            messField.setVisibility(View.VISIBLE);
                         }
                     });
                 }else{
-                    nickField.setText("");
-                    nickField.setHint("That username is taken. Try again.");
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            nickField.setText("");
+                            nickField.setHint("That username is taken. Try again.");
+                        }
+                    });
                 }
             }
         });
