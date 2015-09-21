@@ -1,5 +1,6 @@
 package com.avik.chatroom;
 import android.app.Activity;
+import android.media.Image;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.text.Html;
@@ -11,6 +12,8 @@ import android.view.View;
 import android.view.inputmethod.EditorInfo;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageButton;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -28,6 +31,8 @@ public class MainActivity extends Activity {
     private EditText messField;
     private TextView content;
     private String styledMsgs;
+    private ScrollView scrollView;
+    private ImageButton sendButton;
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -37,18 +42,28 @@ public class MainActivity extends Activity {
         messField = (EditText)findViewById(R.id.messField);
         content = (TextView)findViewById(R.id.content);
         join = (Button)findViewById(R.id.join);
+        scrollView = (ScrollView)findViewById(R.id.scrollView);
+        sendButton=(ImageButton)findViewById(R.id.send);
+        messField.setVisibility(View.GONE);
+        sendButton.setVisibility(View.GONE);
+        content.setVisibility(View.GONE);
         messField.setOnEditorActionListener(new TextView.OnEditorActionListener() {
             @Override
             public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
                 boolean handled = false;
                 if (actionId == EditorInfo.IME_ACTION_SEND) {
-                    if(messField.getText().toString().length()>0) {
-
+                    if (messField.getText().toString().length() > 0) {
+                        scrollView.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                scrollView.fullScroll(View.FOCUS_DOWN);
+                            }
+                        });
                         socket.emit("send message", messField.getText().toString(), new Ack() {
                             @Override
                             public void call(Object... args) {//only called if there is an error
-                                String msg = (String)args[0];
-                                styledMsgs+="<font color = #ff0000>"+msg+"</font><br/>";
+                                String msg = (String) args[0];
+                                styledMsgs += "<font color = #ff0000>" + msg + "</font><br/>";
                                 content.setText(Html.fromHtml(styledMsgs));
                             }
                         });
@@ -62,9 +77,33 @@ public class MainActivity extends Activity {
                 return handled;
             }
         });
-
+        sendButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (messField.getText().toString().length() > 0) {
+                    scrollView.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            scrollView.fullScroll(View.FOCUS_DOWN);
+                        }
+                    });
+                    socket.emit("send message", messField.getText().toString(), new Ack() {
+                        @Override
+                        public void call(Object... args) {//only called if there is an error
+                            String msg = (String) args[0];
+                            styledMsgs += "<font color = #ff0000>" + msg + "</font><br/>";
+                            content.setText(Html.fromHtml(styledMsgs));
+                        }
+                    });
+                        /*socket.emit('send message', $messageBox.val(), function(data){
+						    $chat.append('<span class="error">'+data+"<span><br/>");
+					    });*/
+                }
+                messField.setText("");
+            }
+        });
         try{
-            socket = IO.socket("http://10.0.0.33:3000");
+            socket = IO.socket("http://basicnodechat.herokuapp.com/");
             socket.connect();
         }catch(Exception e) {
             Log.d("error", "couldnt create socket");
@@ -95,10 +134,32 @@ public class MainActivity extends Activity {
                 }
             }
         });
+
+        socket.on("whisper", new Emitter.Listener() {
+            @Override
+            public void call(Object... args) {
+                JSONObject o = (JSONObject)args[0];
+                try {
+                    displayWhisper(o);
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+            }
+        });
     }
 
     public void displayMsg(JSONObject msg) throws JSONException{
         styledMsgs+="<b><font color = "+msg.getString("color")+">"+msg.getString("nick")+": </font></b>"+msg.getString("msg")+"<br/>";
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                content.setText(Html.fromHtml(styledMsgs));
+            }
+        });
+    }
+
+    public void displayWhisper(JSONObject msg) throws JSONException{
+        styledMsgs+="<b><font color = >"+msg.getString("nick")+": </font></b>"+msg.getString("msg")+"<br/>";
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
@@ -133,6 +194,7 @@ public class MainActivity extends Activity {
                         public void run() {
                             nickField.setVisibility(View.GONE);
                             join.setVisibility(View.GONE);
+                            sendButton.setVisibility(View.VISIBLE);
                             content.setVisibility(View.VISIBLE);
                             messField.setVisibility(View.VISIBLE);
                         }
